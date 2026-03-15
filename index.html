@@ -35,12 +35,16 @@ canvas{
 #message{
   position:absolute;
   top:15%;
-  width:100%;
-  font-size:40px;
+  width:90%;
+  max-width:600px;
+  left:50%;
+  transform:translateX(-50%);
+  font-size:36px;
   display:none;
   color:white;
   text-shadow:0 0 20px #fff;
   font-weight:bold;
+  line-height:1.4;
   z-index:2;
 }
 
@@ -50,9 +54,9 @@ canvas{
   display:block;
   margin-top:20px;
   line-height:1.6;
-  max-width:90%;
-  margin-left:auto;
-  margin-right:auto;
+  max-width:100%;
+  word-wrap: break-word;
+  text-align:center;
   z-index:2;
 }
 </style>
@@ -105,14 +109,14 @@ function heart(t){
 
 function initHeartParticles(){
   heartParticles=[];
-  for(let i=0;i<400;i++){ // doubled particles for fullness
+  for(let i=0;i<400;i++){
     let angle=Math.random()*Math.PI*2;
-    let size = 8 + Math.random()*12; // varied size for depth
+    let size = 8 + Math.random()*12;
     heartParticles.push({
       angle:angle,
-      speed:0.002 + Math.random()*0.004, // slower, gentle drift
+      speed:0.002 + Math.random()*0.004,
       size:size,
-      offsetX:Math.random()*6-3, // small random offsets
+      offsetX:Math.random()*6-3,
       offsetY:Math.random()*6-3
     });
   }
@@ -168,7 +172,7 @@ function drawConfetti(){
 }
 
 // ------------------------ Typing personal message ------------------------
-const text="Thank you for always being there for me.\nYou are not just my sister, you are my best friend.\nHappy 23rd Birthday ❤️";
+const text="Thank you for always being there for me.\nYou are not just my sister, you are my best friend.\nMost of my favorite memories have you in them. You have made my life brighter, happier and full of love and I will be forever grateful.\nHappy 23rd Birthday ❤️";
 let i=0;
 const typingDiv=document.getElementById("typing");
 function typeMessage(){
@@ -191,4 +195,4 @@ function showBirthday(){
 </script>
 
 </body>
-</html>
+  </html>
