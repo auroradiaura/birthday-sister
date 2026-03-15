@@ -32,30 +32,28 @@ canvas{
   z-index:2;
 }
 
-#birthday{
+#message{
   position:absolute;
   top:15%;
   width:100%;
-  font-size:50px;
-  font-weight:bold;
+  font-size:40px;
   display:none;
   color:white;
   text-shadow:0 0 20px #fff;
+  font-weight:bold;
   z-index:2;
 }
 
-#message{
-  position:absolute;
-  top:35%;
-  width:90%;
-  max-width:600px;
-  font-size:22px;
-  line-height:1.5;
-  display:none;
+#typing{
+  font-size:18px;
   color:#ffd1dc;
-  z-index:2;
+  display:block;
+  margin-top:20px;
+  line-height:1.6;
+  max-width:90%;
   margin-left:auto;
   margin-right:auto;
+  z-index:2;
 }
 
 #iloveyou{
@@ -71,11 +69,17 @@ canvas{
 }
 </style>
 </head>
+
 <body>
 
 <div id="count">1</div>
-<div id="birthday">Happy 23rd Birthday Sister ❤️</div>
-<div id="message"></div>
+
+<div id="message">
+  Happy 23rd Birthday Sister ❤️
+  <br><br>
+  <span id="typing"></span>
+</div>
+
 <div id="iloveyou">I love you</div>
 
 <canvas id="canvas"></canvas>
@@ -84,7 +88,6 @@ canvas{
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-// Resize canvas
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -103,9 +106,9 @@ let timer = setInterval(()=>{
     countDiv.style.display = "none";
     showBirthday();
   }
-}, 1000);
+},1000);
 
-// ------------------------ "I love you" heart movement ------------------------
+// ------------------------ Heart-shaped "I love you" ------------------------
 let iloveDiv = document.getElementById("iloveyou");
 let t = 0;
 function animateILoveHeart(){
@@ -115,31 +118,6 @@ function animateILoveHeart(){
   iloveDiv.style.left = canvas.width/2 + x*20 + "px";
   iloveDiv.style.top = canvas.height/2 + y*20 + "px";
   requestAnimationFrame(animateILoveHeart);
-}
-
-// ------------------------ Birthday text bounce ------------------------
-let birthdayDiv = document.getElementById("birthday");
-let birthdayY = 0;
-let birthdayDir = 1;
-function animateBirthday(){
-  birthdayY += birthdayDir * 0.5;
-  if(birthdayY > 10 || birthdayY < -10){
-    birthdayDir *= -1;
-  }
-  birthdayDiv.style.transform = `translateY(${birthdayY}px)`;
-  requestAnimationFrame(animateBirthday);
-}
-
-// ------------------------ Typing personal message ------------------------
-const text = "Thank you for always being there for me.\nYou are not just my sister, you are my best friend.\nHappy 23rd Birthday ❤️";
-let i = 0;
-const messageDiv = document.getElementById("message");
-function typeMessage(){
-  if(i < text.length){
-    messageDiv.innerHTML += text.charAt(i)==="\n"?"<br>":text.charAt(i);
-    i++;
-    setTimeout(typeMessage,40);
-  }
 }
 
 // ------------------------ Confetti ------------------------
@@ -173,16 +151,50 @@ function drawConfetti(){
   requestAnimationFrame(drawConfetti);
 }
 
-// ------------------------ Show everything ------------------------
+// ------------------------ Typing personal message ------------------------
+const text = "Thank you for always being there for me.\nYou are not just my sister, you are my best friend.\nHappy 23rd Birthday ❤️";
+let i=0;
+const typingDiv = document.getElementById("typing");
+function typeMessage(){
+  if(i<text.length){
+    typingDiv.innerHTML += text.charAt(i)==="\n"? "<br>":text.charAt(i);
+    i++;
+    setTimeout(typeMessage,40);
+  }
+}
+
+// ------------------------ Canvas cake ------------------------
+function drawCake(){
+  const cakeX = canvas.width/2;
+  const cakeY = canvas.height*0.75;
+  const cakeWidth = 120;
+  const cakeHeight = 80;
+
+  // Base layer
+  ctx.fillStyle="#ff4d6d";
+  ctx.fillRect(cakeX-cakeWidth/2, cakeY-cakeHeight, cakeWidth, cakeHeight);
+
+  // Frosting layer
+  ctx.fillStyle="#fff";
+  ctx.fillRect(cakeX-cakeWidth/2, cakeY-cakeHeight-20, cakeWidth, 20);
+
+  // Heart on top
+  ctx.font="30px Arial";
+  ctx.fillStyle="red";
+  ctx.fillText("❤",cakeX-10,cakeY-cakeHeight-5);
+
+  requestAnimationFrame(drawCake);
+}
+
+// ------------------------ Show birthday elements ------------------------
 function showBirthday(){
-  birthdayDiv.style.display = "block";
-  iloveDiv.style.display = "block";
-  messageDiv.style.display = "block";
+  document.getElementById("message").style.display="block";
+  document.getElementById("iloveyou").style.display="block";
   animateILoveHeart();
-  animateBirthday();
-  typeMessage();
   createConfetti();
   drawConfetti();
+  drawCake();
+  typeMessage();
 }
 </script>
 
