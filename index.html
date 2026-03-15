@@ -1,4 +1,4 @@
-here<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -44,14 +44,29 @@ canvas{
   z-index:2;
 }
 
+#message{
+  position:absolute;
+  top:35%;
+  width:90%;
+  max-width:600px;
+  font-size:22px;
+  line-height:1.5;
+  display:none;
+  color:#ffd1dc;
+  z-index:2;
+  margin-left:auto;
+  margin-right:auto;
+}
+
 #iloveyou{
   position:absolute;
   top:50%;
-  width:100%;
+  left:50%;
   font-size:40px;
   font-weight:bold;
   color:red;
-  transform:translateY(-50%);
+  transform:translate(-50%,-50%);
+  display:none;
   z-index:2;
 }
 </style>
@@ -60,6 +75,7 @@ canvas{
 
 <div id="count">1</div>
 <div id="birthday">Happy 23rd Birthday Sister ❤️</div>
+<div id="message"></div>
 <div id="iloveyou">I love you</div>
 
 <canvas id="canvas"></canvas>
@@ -68,6 +84,7 @@ canvas{
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
+// Resize canvas
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -88,23 +105,45 @@ let timer = setInterval(()=>{
   }
 }, 1000);
 
-// ------------------------ Heart “I love you” animation ------------------------
+// ------------------------ "I love you" heart movement ------------------------
 let iloveDiv = document.getElementById("iloveyou");
-let iloveY = canvas.height / 2;
-let direction = 1;
+let t = 0;
+function animateILoveHeart(){
+  t += 0.02;
+  let x = 16*Math.pow(Math.sin(t),3);
+  let y = -(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t));
+  iloveDiv.style.left = canvas.width/2 + x*20 + "px";
+  iloveDiv.style.top = canvas.height/2 + y*20 + "px";
+  requestAnimationFrame(animateILoveHeart);
+}
 
-function animateILoveYou(){
-  iloveY += direction * 0.8; // slow up and down movement
-  if(iloveY > window.innerHeight/2 + 20 || iloveY < window.innerHeight/2 - 20){
-    direction *= -1;
+// ------------------------ Birthday text bounce ------------------------
+let birthdayDiv = document.getElementById("birthday");
+let birthdayY = 0;
+let birthdayDir = 1;
+function animateBirthday(){
+  birthdayY += birthdayDir * 0.5;
+  if(birthdayY > 10 || birthdayY < -10){
+    birthdayDir *= -1;
   }
-  iloveDiv.style.top = iloveY + "px";
-  requestAnimationFrame(animateILoveYou);
+  birthdayDiv.style.transform = `translateY(${birthdayY}px)`;
+  requestAnimationFrame(animateBirthday);
+}
+
+// ------------------------ Typing personal message ------------------------
+const text = "Thank you for always being there for me.\nYou are not just my sister, you are my best friend.\nHappy 23rd Birthday ❤️";
+let i = 0;
+const messageDiv = document.getElementById("message");
+function typeMessage(){
+  if(i < text.length){
+    messageDiv.innerHTML += text.charAt(i)==="\n"?"<br>":text.charAt(i);
+    i++;
+    setTimeout(typeMessage,40);
+  }
 }
 
 // ------------------------ Confetti ------------------------
 let confettiParticles = [];
-
 function createConfetti(){
   for(let i=0;i<150;i++){
     confettiParticles.push({
@@ -117,7 +156,6 @@ function createConfetti(){
     });
   }
 }
-
 function drawConfetti(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   confettiParticles.forEach(p=>{
@@ -128,7 +166,6 @@ function drawConfetti(){
     ctx.lineTo(p.x + p.tilt - p.r/2, p.y + p.r);
     ctx.closePath();
     ctx.fill();
-
     p.y += 2;
     p.x += Math.sin(p.y * 0.05);
     if(p.y > canvas.height){ p.y = -10; p.x = Math.random()*canvas.width; }
@@ -136,11 +173,14 @@ function drawConfetti(){
   requestAnimationFrame(drawConfetti);
 }
 
-// ------------------------ Show birthday elements ------------------------
+// ------------------------ Show everything ------------------------
 function showBirthday(){
-  document.getElementById("birthday").style.display = "block";
+  birthdayDiv.style.display = "block";
   iloveDiv.style.display = "block";
-  animateILoveYou();
+  messageDiv.style.display = "block";
+  animateILoveHeart();
+  animateBirthday();
+  typeMessage();
   createConfetti();
   drawConfetti();
 }
