@@ -66,7 +66,7 @@ canvas {
     0 8px 40px rgba(0,0,10,0.7),
     inset 0 1px 0 rgba(200,220,255,0.12);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   text-align: center;
 }
 
@@ -140,31 +140,35 @@ canvas {
   inset: 0;
   z-index: 3000;
   background: radial-gradient(ellipse at 50% 40%, #0a0e2a 0%, #05081a 60%, #000 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 0;
-  padding: 20px;
   transition: opacity 1s ease;
-  box-sizing: border-box;
   overflow: hidden;
 }
 #lock-screen.hide { opacity: 0; pointer-events: none; }
 
-/* Particles behind everything */
+/* Particles fill the entire screen */
 #lock-particles {
   position: absolute;
-  inset: 0;
+  top: 0; left: 0;
   width: 100%; height: 100%;
   pointer-events: none;
   z-index: 0;
 }
 
-/* All lock content above particles */
-#lock-icon, #lock-hint, #lock-clue, #lock-input-wrap {
-  position: relative;
+/* Content wrapper — centered over the canvas */
+#lock-content {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 90%;
+  max-width: 400px;
+  gap: 0;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
 /* Lock icon */
@@ -416,14 +420,16 @@ canvas {
 <!-- SECRET LOCK SCREEN -->
 <div id="lock-screen">
   <canvas id="lock-particles"></canvas>
-  <div id="lock-icon">🔐</div>
-  <div id="lock-hint">Enter the secret word</div>
-  <div id="lock-clue">Hint: Animal in brown</div>
-  <div id="lock-input-wrap">
-    <input id="lock-input" type="text" placeholder="Type here..." autocomplete="off" autocorrect="off" spellcheck="false"/>
-    <button id="lock-btn">UNLOCK ✦</button>
-    <div id="lock-error">Wrong password. Try again! 🔒</div>
-    <div id="lock-success">🔓 Unlocking...</div>
+  <div id="lock-content">
+    <div id="lock-icon">🔐</div>
+    <div id="lock-hint">Enter the secret word</div>
+    <div id="lock-clue">Hint: Animal in brown</div>
+    <div id="lock-input-wrap">
+      <input id="lock-input" type="text" placeholder="Type here..." autocomplete="off" autocorrect="off" spellcheck="false"/>
+      <button id="lock-btn">UNLOCK ✦</button>
+      <div id="lock-error">Wrong password. Try again! 🔒</div>
+      <div id="lock-success">🔓 Unlocking...</div>
+    </div>
   </div>
 </div>
 
@@ -440,6 +446,16 @@ canvas {
     <div class="silver-line"></div>
     <span id="typing"></span>
     <div class="silver-line" id="card-bottom-line"></div>
+    <div id="cake-wrap" style="
+      opacity:0;
+      transform:translateY(12px);
+      transition:opacity 1s ease, transform 1s ease;
+      text-align:center;
+      margin-top:12px;
+      padding-top:4px;
+    ">
+      <canvas id="cake-canvas"></canvas>
+    </div>
   </div>
 </div>
 
@@ -697,16 +713,31 @@ function initHeartParticles(){
   const W      = canvas.width;
   const H      = canvas.height;
   const isMob  = W < 600;
-  // Font: small enough to pack nicely, scaled to screen
   const minSize = isMob ? 5 : 6;
   const maxSize = isMob ? 8 : 11;
+  const targetW = isMob ? W*0.38 : Math.min(W*0.30, H*0.40);
+  const scale   = targetW / 16;
+  const CX = W / 2;
+  const CY = H / 2 - (isMob ? H*0.04 : H*0.05);
   for(let i = 0; i < 400; i++){
+    const angle = Math.random() * Math.PI * 2;
+    const pos   = heart(angle);
+    const tx    = CX + pos.x * scale + (Math.random()-0.5)*3;
+    const ty    = CY + pos.y * scale + (Math.random()-0.5)*3;
+    const spread = Math.max(W, H) * 1.1;
+    const startA = Math.random() * Math.PI * 2;
+    const startR = spread * (0.3 + Math.random() * 0.7);
+    const sx     = CX + Math.cos(startA) * startR;
+    const sy     = CY + Math.sin(startA) * startR;
+    const delay  = Math.random() * 1.8;
+    const dur    = 1.0 + Math.random() * 0.8;
     heartParticles.push({
-      angle:   Math.random() * Math.PI * 2,
-      speed:   0.002 + Math.random() * 0.003,
-      size:    minSize + Math.random() * (maxSize - minSize),
-      offsetX: (Math.random() - 0.5) * 3,
-      offsetY: (Math.random() - 0.5) * 3,
+      angle, speed: 0.002 + Math.random()*0.003,
+      size: minSize + Math.random()*(maxSize-minSize),
+      sx, sy, tx, ty, cx: sx, cy: sy,
+      delay, dur, arrived: false, arrivalTime: 0,
+      offsetX: (Math.random()-0.5)*3,
+      offsetY: (Math.random()-0.5)*3,
     });
   }
 }
@@ -715,132 +746,145 @@ function initHeartParticles(){
 let heartPageTime   = 0;
 let heartMsgAlpha   = 0;
 let heartMsgStarted = false;
-let heartFadeAlpha  = 0;   // heart fades IN from 0→1
-let pageOutAlpha    = 0;   // everything fades OUT 0→1 (black overlay)
+let assemblyDone    = false;
+let pageOutAlpha    = 0;
 let pageFadingOut   = false;
+const ASSEMBLY_DUR  = 3.5;
+let shockwaveR = 0, shockwaveA = 1, shockwaveDone = false;
 
-// Fireflies
 const fireflies = Array.from({length: 35}, () => ({
   x: Math.random(), y: Math.random(),
-  vx: (Math.random()-0.5)*0.0012,
-  vy: (Math.random()-0.5)*0.0010,
-  r:  1.2 + Math.random()*2.2,
-  phase:  Math.random()*Math.PI*2,
-  speed:  0.018 + Math.random()*0.035,
-  alpha:  0.4 + Math.random()*0.5,
-  color:  Math.random() < 0.6
-    ? `hsl(${50+Math.random()*30},90%,${70+Math.random()*25}%)`   // warm gold/yellow
-    : `hsl(${130+Math.random()*40},80%,${60+Math.random()*30}%)`, // soft green
+  vx: (Math.random()-0.5)*0.0012, vy: (Math.random()-0.5)*0.0010,
+  r: 1.2 + Math.random()*2.2, phase: Math.random()*Math.PI*2,
+  speed: 0.018 + Math.random()*0.035, alpha: 0.4 + Math.random()*0.5,
+  color: Math.random()<0.6
+    ? `hsl(${50+Math.random()*30},90%,${70+Math.random()*25}%)`
+    : `hsl(${130+Math.random()*40},80%,${60+Math.random()*30}%)`,
 }));
+
+function easeOutQuart(t){ return 1-Math.pow(1-t,4); }
 
 function drawHeartParticles(){
   if (!heartVisible) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const W     = canvas.width;
-  const H     = canvas.height;
+  const W = canvas.width, H = canvas.height;
   const isMob = W < 600;
   heartPageTime += 0.016;
+  const CX = W/2, CY = H/2 - (isMob ? H*0.04 : H*0.05);
 
-  // Fade heart in over 2s
-  heartFadeAlpha = Math.min(heartFadeAlpha + 0.008, 1);
-
-  // ── Fireflies ──
+  // Fireflies
+  const ffA = Math.min(heartPageTime/2.5, 1);
   fireflies.forEach(f => {
-    f.phase += f.speed;
-    f.x += f.vx; f.y += f.vy;
-    if (f.x < 0) f.x = 1; if (f.x > 1) f.x = 0;
-    if (f.y < 0) f.y = 1; if (f.y > 1) f.y = 0;
-    const twinkle = 0.2 + Math.abs(Math.sin(f.phase)) * 0.8;
-    const a = f.alpha * twinkle * heartFadeAlpha;
-    const sz = f.r * (0.5 + Math.abs(Math.sin(f.phase)) * 0.8);
+    f.phase += f.speed; f.x += f.vx; f.y += f.vy;
+    if(f.x<0)f.x=1; if(f.x>1)f.x=0; if(f.y<0)f.y=1; if(f.y>1)f.y=0;
+    const tw = 0.2+Math.abs(Math.sin(f.phase))*0.8;
+    const a  = f.alpha*tw*ffA;
+    const sz = f.r*(0.5+Math.abs(Math.sin(f.phase))*0.8);
     ctx.save();
-    ctx.globalAlpha = a * 0.85;
-    ctx.fillStyle   = f.color;
-    ctx.shadowColor = f.color;
-    ctx.shadowBlur  = 14;
-    ctx.beginPath();
-    ctx.arc(f.x * W, f.y * H, sz, 0, Math.PI*2);
-    ctx.fill();
-    // Soft halo
-    ctx.globalAlpha = a * 0.18;
-    ctx.beginPath();
-    ctx.arc(f.x * W, f.y * H, sz * 3.5, 0, Math.PI*2);
-    ctx.fill();
+    ctx.globalAlpha=a*0.85; ctx.fillStyle=f.color; ctx.shadowColor=f.color; ctx.shadowBlur=14;
+    ctx.beginPath(); ctx.arc(f.x*W,f.y*H,sz,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=a*0.18; ctx.beginPath(); ctx.arc(f.x*W,f.y*H,sz*3.5,0,Math.PI*2); ctx.fill();
     ctx.restore();
   });
 
-  const CX = W / 2;
-  const CY = H / 2;
-
-  // ── Heart particles fade in ──
-  const targetW = isMob ? W*0.38 : Math.min(W*0.30, H*0.40);
-  const scale   = targetW / 16;
-
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-  heartParticles.forEach(p => {
-    p.angle += p.speed;
-    const pos = heart(p.angle);
-    ctx.globalAlpha = heartFadeAlpha;
-    ctx.fillStyle   = 'red';
-    ctx.font        = `bold ${p.size}px Arial`;
-    ctx.fillText('I love you', CX+pos.x*scale+p.offsetX, CY+pos.y*scale+p.offsetY);
-  });
-  ctx.globalAlpha = 1;
-
-  // ── Gold message fades in at center after 2.5s ──
-  if (!heartMsgStarted && heartPageTime > 2.5) heartMsgStarted = true;
-  if (heartMsgStarted) {
-    heartMsgAlpha = Math.min(heartMsgAlpha + 0.007, 1);
-    const fs1   = isMob ? 11 : 14;
-    const fs2   = isMob ? 13 : 17;
-    const pulse = 1 + Math.sin(heartPageTime*1.1)*0.022;
-
+  // Shockwave ring
+  if (!shockwaveDone) {
+    shockwaveR += 16; shockwaveA = Math.max(0, shockwaveA-0.020);
+    if (shockwaveA<=0) shockwaveDone=true;
     ctx.save();
-    ctx.globalAlpha  = heartMsgAlpha;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-
-    const g1 = ctx.createLinearGradient(CX-110,0,CX+110,0);
-    g1.addColorStop(0,   '#8B6914');
-    g1.addColorStop(0.25,'#c8940a');
-    g1.addColorStop(0.5, '#ffffff');
-    g1.addColorStop(0.75,'#c8940a');
-    g1.addColorStop(1,   '#8B6914');
-    ctx.font        = `italic ${fs1}px Georgia, serif`;
-    ctx.fillStyle   = g1;
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur  = 14;
-    ctx.fillText('Cheers to another', CX, CY - (isMob ? 18:24));
-
-    const g2 = ctx.createLinearGradient(CX-80,0,CX+80,0);
-    g2.addColorStop(0,   '#8B6914');
-    g2.addColorStop(0.3, '#e8c060');
-    g2.addColorStop(0.5, '#ffffff');
-    g2.addColorStop(0.7, '#e8c060');
-    g2.addColorStop(1,   '#8B6914');
-    ctx.font        = `bold italic ${(fs2*pulse).toFixed(1)}px Georgia, serif`;
-    ctx.fillStyle   = g2;
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur  = 22;
-    ctx.fillText('trip around the sun!', CX, CY + (isMob ? 8:11));
+    ctx.globalAlpha=shockwaveA; ctx.strokeStyle='#4488ff';
+    ctx.lineWidth=3; ctx.shadowColor='#88aaff'; ctx.shadowBlur=22;
+    ctx.beginPath(); ctx.arc(CX,CY,shockwaveR,0,Math.PI*2); ctx.stroke();
+    ctx.globalAlpha=shockwaveA*0.4; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(CX,CY,shockwaveR*0.75,0,Math.PI*2); ctx.stroke();
     ctx.restore();
-
-    // Start fading out after message fully shown + 4s
-    if (heartMsgAlpha >= 1 && heartPageTime > 8 && !pageFadingOut) {
-      pageFadingOut = true;
-    }
   }
 
-  // ── Slow fade to black at the end ──
+  // Assembly
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  let allArrived = true;
+  heartParticles.forEach(p => {
+    if (heartPageTime < p.delay) {
+      allArrived = false;
+      ctx.save(); ctx.globalAlpha=0.15+Math.sin(heartPageTime*4+p.sx)*0.08;
+      ctx.fillStyle='#4488ff'; ctx.shadowColor='#4488ff'; ctx.shadowBlur=6;
+      ctx.beginPath(); ctx.arc(p.sx,p.sy,p.size*0.4,0,Math.PI*2); ctx.fill(); ctx.restore();
+      return;
+    }
+    if (!p.arrived) {
+      const prog = Math.min((heartPageTime-p.delay)/p.dur, 1);
+      const ease = easeOutQuart(prog);
+      const midX = (p.sx+p.tx)/2+(p.ty-p.sy)*0.3;
+      const midY = (p.sy+p.ty)/2-(p.tx-p.sx)*0.3;
+      const t1   = 1-ease;
+      p.cx = t1*t1*p.sx+2*t1*ease*midX+ease*ease*p.tx;
+      p.cy = t1*t1*p.sy+2*t1*ease*midY+ease*ease*p.ty;
+      if (prog>=1){ p.arrived=true; p.arrivalTime=heartPageTime; }
+      else allArrived=false;
+      // Trail dot
+      ctx.save(); ctx.globalAlpha=ease*0.5; ctx.fillStyle='#6699ff';
+      ctx.shadowColor='#4488ff'; ctx.shadowBlur=8;
+      ctx.beginPath(); ctx.arc(p.cx,p.cy,p.size*0.5,0,Math.PI*2); ctx.fill(); ctx.restore();
+      // Flying text
+      ctx.save(); ctx.globalAlpha=ease*0.85; ctx.fillStyle=`rgba(200,50,50,${ease})`;
+      ctx.font=`bold ${p.size}px Arial`; ctx.fillText('I love you',p.cx,p.cy); ctx.restore();
+    } else {
+      // After assembly: flow continuously around heart shape
+      p.angle += p.speed;
+      const flash = Math.max(0,1-(heartPageTime-p.arrivalTime)*3);
+      // Once flash done, draw at flowing position
+      const pos = heart(p.angle);
+      const targetW2 = isMob ? W*0.38 : Math.min(W*0.30, H*0.40);
+      const scale2   = targetW2 / 16;
+      const fx = CX + pos.x * scale2 + p.offsetX;
+      const fy = CY + pos.y * scale2 + p.offsetY;
+      ctx.save(); ctx.globalAlpha=1;
+      if(flash>0){
+        ctx.shadowColor='#fff'; ctx.shadowBlur=flash*12;
+        ctx.fillStyle=`rgba(255,${50+Math.round(200*flash)},${50+Math.round(200*flash)},1)`;
+        ctx.font=`bold ${p.size}px Arial`;
+        ctx.fillText('I love you', p.tx+p.offsetX, p.ty+p.offsetY);
+      } else {
+        ctx.fillStyle='red';
+        ctx.font=`bold ${p.size}px Arial`;
+        ctx.fillText('I love you', fx, fy);
+      }
+      ctx.restore();
+    }
+  });
+
+  if (allArrived && !assemblyDone) {
+    assemblyDone = true;
+    shockwaveR=0; shockwaveA=1.2; shockwaveDone=false;
+  }
+
+  // Gold message after assembly
+  if (assemblyDone && !heartMsgStarted && heartPageTime > ASSEMBLY_DUR+1.0) heartMsgStarted=true;
+  if (heartMsgStarted) {
+    heartMsgAlpha = Math.min(heartMsgAlpha+0.007, 1);
+    const fs1=isMob?11:14, fs2=isMob?13:17;
+    const pulse=1+Math.sin(heartPageTime*1.1)*0.022;
+    ctx.save(); ctx.globalAlpha=heartMsgAlpha; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const g1=ctx.createLinearGradient(CX-110,0,CX+110,0);
+    g1.addColorStop(0,'#8B6914'); g1.addColorStop(0.25,'#c8940a');
+    g1.addColorStop(0.5,'#ffffff'); g1.addColorStop(0.75,'#c8940a'); g1.addColorStop(1,'#8B6914');
+    ctx.font=`italic ${fs1}px Georgia,serif`; ctx.fillStyle=g1;
+    ctx.shadowColor='#ffd700'; ctx.shadowBlur=14;
+    ctx.fillText('Cheers to another',CX,CY-(isMob?18:24));
+    const g2=ctx.createLinearGradient(CX-80,0,CX+80,0);
+    g2.addColorStop(0,'#8B6914'); g2.addColorStop(0.3,'#e8c060');
+    g2.addColorStop(0.5,'#ffffff'); g2.addColorStop(0.7,'#e8c060'); g2.addColorStop(1,'#8B6914');
+    ctx.font=`bold italic ${(fs2*pulse).toFixed(1)}px Georgia,serif`; ctx.fillStyle=g2;
+    ctx.shadowColor='#ffd700'; ctx.shadowBlur=22;
+    ctx.fillText('trip around the sun!',CX,CY+(isMob?8:11)); ctx.restore();
+    if (heartMsgAlpha>=1 && heartPageTime>ASSEMBLY_DUR+6 && !pageFadingOut) pageFadingOut=true;
+  }
+
+  // Fade to black
   if (pageFadingOut) {
-    pageOutAlpha = Math.min(pageOutAlpha + 0.004, 1);
-    ctx.save();
-    ctx.globalAlpha = pageOutAlpha;
-    ctx.fillStyle   = '#000';
-    ctx.fillRect(0, 0, W, H);
-    ctx.restore();
+    pageOutAlpha=Math.min(pageOutAlpha+0.004,1);
+    ctx.save(); ctx.globalAlpha=pageOutAlpha; ctx.fillStyle='#000';
+    ctx.fillRect(0,0,W,H); ctx.restore();
   }
 
   requestAnimationFrame(drawHeartParticles);
@@ -949,53 +993,63 @@ function showGiftBox(onOpen) {
   // Overlay div
   const wrap = document.createElement('div');
   wrap.style.cssText = `
-    position:fixed;inset:0;z-index:20;
-    background:#000;
-    display:flex;flex-direction:column;
-    align-items:center;justify-content:center;
-    gap:0; cursor:pointer;
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    z-index:20; background:#000; cursor:pointer;
     opacity:0; transition:opacity .6s ease;
   `;
 
-  // Canvas for the box drawing
+  // Canvas — absolutely centered
   const gc = document.createElement('canvas');
-  gc.style.cssText = 'display:block;';
+  gc.style.cssText = `
+    position:absolute;
+    top:50%; left:50%;
+    transform:translate(-50%,-50%);
+    display:block;
+  `;
   wrap.appendChild(gc);
-
-  // Prompt label
-  const label = document.createElement('div');
-  label.style.cssText = `
-    font-family:Georgia,serif; font-style:italic;
-    font-size:clamp(14px,3.5vw,20px);
-    color:#c8d8ff; letter-spacing:2px;
-    text-align:center; margin-top:clamp(14px,3vh,22px);
-    text-shadow:0 0 14px rgba(140,170,255,0.6);
-    min-height:1.4em;
-  `;
-  wrap.appendChild(label);
-
-  // Hint label
-  const hint = document.createElement('div');
-  hint.style.cssText = `
-    font-family:Georgia,serif; font-size:clamp(11px,2.5vw,14px);
-    color:rgba(140,170,255,0.5); letter-spacing:2px;
-    margin-top:8px; opacity:0; transition:opacity .8s ease;
-  `;
-  hint.textContent = '— tap anywhere to open —';
-  wrap.appendChild(hint);
 
   document.body.appendChild(wrap);
   requestAnimationFrame(() => requestAnimationFrame(() => { wrap.style.opacity = '1'; }));
 
-  // Canvas size
+  // Canvas size — fixed small pixels
   const isMob = window.innerWidth < 600;
-  const BW = isMob ? 170 : 230;
-  const BH = isMob ? 150 : 200;
-  const LH = isMob ?  42 : 55;
-  const PAD = 20;
+  const BW = isMob ? 75 : 90;
+  const BH = BW * 0.75;
+  const LH = BW * 0.22;
+  const PAD = 10;
+  const canvasH = BH + LH + PAD*2;
 
   gc.width  = BW + PAD*2;
-  gc.height = BH + LH + PAD*2;
+  gc.height = canvasH;
+  gc.style.width  = (BW + PAD*2) + 'px';
+  gc.style.height = canvasH + 'px';
+
+  // Create and position label and hint below centered canvas
+  const label = document.createElement('div');
+  label.style.cssText = `
+    position:absolute; left:50%; top:50%;
+    transform:translate(-50%, ${Math.round(canvasH/2 + 14)}px);
+    font-family:Georgia,serif; font-style:italic;
+    font-size:clamp(13px,3vw,16px);
+    color:#c8d8ff; letter-spacing:2px;
+    text-align:center; white-space:nowrap;
+    text-shadow:0 0 14px rgba(140,170,255,0.6);
+  `;
+
+  const hint = document.createElement('div');
+  hint.style.cssText = `
+    position:absolute; left:50%; top:50%;
+    transform:translate(-50%, ${Math.round(canvasH/2 + 38)}px);
+    font-family:Georgia,serif; font-size:clamp(11px,2.5vw,13px);
+    color:rgba(140,170,255,0.5); letter-spacing:2px;
+    text-align:center; white-space:nowrap;
+    opacity:0; transition:opacity .8s ease;
+  `;
+  hint.textContent = '— tap anywhere to open —';
+
+  wrap.appendChild(label);
+  wrap.appendChild(hint);
+
   const gx  = gc.getContext('2d');
   const CX  = gc.width  / 2;
   const CY  = gc.height / 2 + LH/2;
@@ -1022,8 +1076,8 @@ function showGiftBox(onOpen) {
     gx.clearRect(0, 0, gc.width, gc.height);
     const bx = CX + shake;
     const by = CY;
-    const rw = isMob ? 16 : 22;
-    const hh = isMob ? 16 : 22;
+    const rw = BW * 0.09;
+    const hh = BW * 0.09;
 
     // ── BOX BODY ──
     gx.save();
@@ -1063,7 +1117,7 @@ function showGiftBox(onOpen) {
     gx.fillStyle = rg; gx.shadowColor='#aaccff'; gx.shadowBlur=8;
     gx.fillRect(bx-rw/2, lidTop, rw, LH);
     // Bow
-    drawBow(bx, lidTop, isMob?20:28);
+    drawBow(bx, lidTop, BW * 0.13);
     gx.restore();
   }
 
@@ -1123,14 +1177,14 @@ function showGiftBox(onOpen) {
     if (phase==='idle') {
       sparks.forEach((s,i)=>{
         s.a += 0.012;
-        const r  = BW*0.65 + Math.sin(t*1.2+i)*8;
+        const r  = BW*0.60 + Math.sin(t*1.2+i)*6;
         const sx = CX + Math.cos(s.a)*r;
         const sy = CY - LH/2 + Math.sin(s.a)*r*0.45;
         const sa = 0.3 + Math.abs(Math.sin(t*1.8+i))*0.7;
         gx.save();
         gx.globalAlpha=sa; gx.fillStyle=i%2?'#ffd700':'#88aaff';
         gx.shadowColor=gx.fillStyle; gx.shadowBlur=8;
-        gx.font=`${isMob?9:12}px serif`;
+        gx.font=`${Math.round(BW*0.05)}px serif`;
         gx.textAlign='center'; gx.fillText('✦',sx,sy);
         gx.restore();
       });
@@ -1178,18 +1232,23 @@ function typeMessage(){
       if (bl) bl.style.opacity = '1';
     }, 300);
 
-    // After 2.5s — card fades out
+    // Cake fades in below message after typing
+    setTimeout(() => {
+      drawCardCake();
+      const cw = document.getElementById('cake-wrap');
+      if (cw) { cw.style.opacity='1'; cw.style.transform='translateY(0)'; }
+    }, 600);
+
+    // After 3.5s — card fades out
     setTimeout(() => {
       const msg = document.getElementById('message');
       msg.style.opacity   = '0';
       msg.style.transform = 'translate(-50%, -48%) scale(0.97)';
 
-      // Stop confetti, show click-rose prompt, then on click grow flowers
       setTimeout(() => {
         msg.style.display = 'none';
         stopConfetti();
         showRosePrompt(() => {
-          // After click → flowers grow
           startFlowers(() => {
             setTimeout(() => {
               fadeFlowers(() => {
@@ -1201,8 +1260,134 @@ function typeMessage(){
           });
         });
       }, 1600);
-    }, 2500);
+    }, 3800);
   }
+}
+
+/* ── BIRTHDAY CAKE drawn on canvas inside card ── */
+function drawCardCake() {
+  const cv = document.getElementById('cake-canvas');
+  if (!cv) return;
+  const isMob = window.innerWidth < 600;
+  const W = isMob ? 130 : 160;
+  const H = isMob ? 140 : 170;
+  cv.width  = W; cv.height = H;
+  cv.style.width  = W+'px'; cv.style.height = H+'px';
+  const c  = cv.getContext('2d');
+  const cx = W / 2;
+
+  // Layout from bottom up
+  const groundY = H - 8;
+  const botH    = H * 0.28;
+  const botW    = W * 0.80;
+  const botY    = groundY - botH;
+  const topH    = H * 0.22;
+  const topW    = W * 0.55;
+  const topY    = botY - topH - 2;
+  const candH   = H * 0.15;
+  const candY   = topY;            // candle base sits on top of upper tier
+  const flameY  = candY - candH;   // flame above candle
+
+  function drawTier(tx, ty, tw, th, colLight, colDark, hasDots) {
+    const r = 5;
+    // Body gradient
+    const g = c.createLinearGradient(tx-tw/2, ty, tx+tw/2, ty+th);
+    g.addColorStop(0,   colLight);
+    g.addColorStop(0.5, colDark);
+    g.addColorStop(1,   colLight);
+    c.save();
+    c.shadowColor = 'rgba(100,150,255,0.4)'; c.shadowBlur = 10;
+    c.fillStyle = g;
+    c.beginPath();
+    c.moveTo(tx-tw/2+r, ty);
+    c.lineTo(tx+tw/2-r, ty); c.quadraticCurveTo(tx+tw/2, ty, tx+tw/2, ty+r);
+    c.lineTo(tx+tw/2, ty+th-r); c.quadraticCurveTo(tx+tw/2, ty+th, tx+tw/2-r, ty+th);
+    c.lineTo(tx-tw/2+r, ty+th); c.quadraticCurveTo(tx-tw/2, ty+th, tx-tw/2, ty+th-r);
+    c.lineTo(tx-tw/2, ty+r); c.quadraticCurveTo(tx-tw/2, ty, tx-tw/2+r, ty);
+    c.closePath(); c.fill();
+    // Border
+    c.strokeStyle = 'rgba(140,180,255,0.5)'; c.lineWidth = 1; c.stroke();
+    c.restore();
+
+    // White frosting drips
+    c.save(); c.fillStyle = 'rgba(255,255,255,0.92)';
+    for (let d = 0; d < 5; d++) {
+      const dx = tx-tw/2+10 + d*(tw-20)/4;
+      const dh = 4 + Math.sin(d*1.8)*2.5;
+      c.beginPath(); c.moveTo(dx-4,ty);
+      c.quadraticCurveTo(dx, ty+dh+3, dx+4, ty);
+      c.fill();
+    }
+    c.restore();
+
+    // Coloured dots on bottom tier
+    if (hasDots) {
+      const cols = ['#a0c4ff','#bde0ff','#90e0ef','#00b4d8','#caf0f8'];
+      cols.forEach((col, d) => {
+        const dx = tx-tw/2+12 + d*(tw-24)/4;
+        c.save(); c.fillStyle=col; c.shadowColor=col; c.shadowBlur=5;
+        c.beginPath(); c.arc(dx, ty+th/2, 3, 0, Math.PI*2); c.fill(); c.restore();
+      });
+    }
+  }
+
+  function drawFrame(t) {
+    c.clearRect(0, 0, W, H);
+
+    // Plate
+    c.save();
+    const pg = c.createLinearGradient(cx-botW/2-4, groundY, cx+botW/2+4, groundY+6);
+    pg.addColorStop(0,'#1a2a6e'); pg.addColorStop(0.5,'#3a5aae'); pg.addColorStop(1,'#1a2a6e');
+    c.fillStyle=pg; c.shadowColor='rgba(80,120,255,0.4)'; c.shadowBlur=8;
+    c.beginPath(); c.ellipse(cx, groundY, botW/2+6, 7, 0, 0, Math.PI*2); c.fill(); c.restore();
+
+    // Bottom tier — lighter blue
+    drawTier(cx, botY, botW, botH, '#2255aa', '#0d1d6e', true);
+    // Top tier — mid blue
+    drawTier(cx, topY, topW, topH, '#1a4090', '#0a1550', false);
+
+    // 3 candles
+    [cx-15, cx, cx+15].forEach((cx2, ci) => {
+      const cw = 5;
+      // Body
+      const cg = c.createLinearGradient(cx2-cw/2, 0, cx2+cw/2, 0);
+      cg.addColorStop(0,'#ddeeff');
+      cg.addColorStop(0.5, ['#4488ff','#88aaff','#2266dd'][ci]);
+      cg.addColorStop(1,'#aaccff');
+      c.save(); c.fillStyle=cg;
+      c.shadowColor='rgba(100,160,255,0.4)'; c.shadowBlur=4;
+      c.fillRect(cx2-cw/2, candY-candH, cw, candH); c.restore();
+      // Wick
+      c.save(); c.strokeStyle='#555'; c.lineWidth=1;
+      c.beginPath(); c.moveTo(cx2, candY-candH); c.lineTo(cx2, candY-candH-3); c.stroke(); c.restore();
+      // Outer flame glow
+      const fw = 3.5+Math.sin(t*6+ci)*1.2;
+      const fh = 8+Math.sin(t*5+ci)*2;
+      const fx = cx2+Math.sin(t*4+ci)*1;
+      const fy = candY-candH-3;
+      const fo = c.createRadialGradient(fx,fy,0,fx,fy,fh);
+      fo.addColorStop(0,'rgba(255,240,160,1)');
+      fo.addColorStop(0.5,'rgba(255,130,10,0.85)');
+      fo.addColorStop(1,'rgba(255,50,0,0)');
+      c.save(); c.fillStyle=fo;
+      c.beginPath();
+      c.moveTo(fx,fy-fh);
+      c.bezierCurveTo(fx+fw,fy-fh*0.4,fx+fw*0.8,fy+2,fx,fy+2);
+      c.bezierCurveTo(fx-fw*0.8,fy+2,fx-fw,fy-fh*0.4,fx,fy-fh);
+      c.fill(); c.restore();
+      // White core
+      c.save();
+      const fc = c.createRadialGradient(fx,fy-fh*0.3,0,fx,fy-fh*0.3,fw*0.6);
+      fc.addColorStop(0,'rgba(255,255,255,1)'); fc.addColorStop(1,'rgba(255,200,50,0)');
+      c.fillStyle=fc; c.beginPath(); c.arc(fx,fy-fh*0.3,fw*0.6,0,Math.PI*2); c.fill(); c.restore();
+    });
+  }
+
+  (function loop(){
+    if (!document.getElementById('cake-canvas')) return;
+    drawFrame(performance.now()/1000);
+    requestAnimationFrame(loop);
+  })();
 }
 
 /* ── Rose click prompt ──
@@ -1316,29 +1501,30 @@ function showRosePrompt(onClicked) {
   }
   setTimeout(typePrompt, 500);
 
-  // Click / tap handler
+  // Click / tap handler — entire screen works
   function handleClick() {
-    roseEl.removeEventListener('click',     handleClick);
-    roseEl.removeEventListener('touchend',  handleTap);
+    roseEl.removeEventListener('click',      handleClick);
+    el.removeEventListener('click',          handleClickEl);
+    roseEl.removeEventListener('touchstart', handleTapRose);
+    el.removeEventListener('touchstart',     handleTapEl);
 
-    // Rose burst animation
     roseEl.style.animation = 'roseClick 0.5s ease-out forwards';
     hintEl.style.opacity   = '0';
     msgEl.style.opacity    = '0';
 
     setTimeout(() => {
-      // Fade out overlay
       el.style.opacity = '0';
-      setTimeout(() => {
-        el.remove();
-        onClicked();
-      }, 800);
+      setTimeout(() => { el.remove(); onClicked(); }, 800);
     }, 400);
   }
-  function handleTap(e) { e.preventDefault(); handleClick(); }
+  function handleClickEl(e) { handleClick(); }
+  function handleTapRose(e) { e.preventDefault(); handleClick(); }
+  function handleTapEl(e)   { e.preventDefault(); handleClick(); }
 
-  roseEl.addEventListener('click',    handleClick);
-  roseEl.addEventListener('touchend', handleTap, {passive:false});
+  roseEl.addEventListener('click',      handleClick);
+  el.addEventListener('click',          handleClickEl);
+  roseEl.addEventListener('touchstart', handleTapRose, {passive:false});
+  el.addEventListener('touchstart',     handleTapEl,   {passive:false});
 }
 
 /* ══════════════════════════════════════════════════
